@@ -1,0 +1,12 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "KuiklyUI #1677 MNIS BedList offline reproducer.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "@kuikly-open/render": "file:../../core-render-ohos",
+    "libkuikly_entry.so": "file:./src/main/cpp/types/kuikly_entry"
+  }
+}

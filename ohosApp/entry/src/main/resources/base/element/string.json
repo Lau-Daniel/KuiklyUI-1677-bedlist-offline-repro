@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "KuiklyUI #1677 MNIS BedList offline reproducer"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "KuiklyUI #1677 MNIS BedList offline reproducer"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Kuikly BedList Reproducer"
+    }
+  ]
+}
