@@ -3,16 +3,12 @@
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import com.tencent.kuikly.compose.animation.core.Animatable
 import com.tencent.kuikly.compose.animation.core.LinearEasing
-import com.tencent.kuikly.compose.animation.core.RepeatMode
-import com.tencent.kuikly.compose.animation.core.animateFloat
-import com.tencent.kuikly.compose.animation.core.infiniteRepeatable
-import com.tencent.kuikly.compose.animation.core.rememberInfiniteTransition
 import com.tencent.kuikly.compose.animation.core.tween
 import com.lachesis.fusion.shared.patient.domain.PatientGroupType
 import com.lachesis.fusion.shared.patient.domain.RiskLevel
@@ -44,7 +40,6 @@ import com.tencent.kuikly.compose.foundation.layout.BoxScope
 import com.tencent.kuikly.compose.foundation.layout.Column
 import com.tencent.kuikly.compose.foundation.layout.ExperimentalLayoutApi
 import com.tencent.kuikly.compose.foundation.layout.FlowRow
-import com.tencent.kuikly.compose.foundation.layout.IntrinsicSize
 import com.tencent.kuikly.compose.foundation.layout.PaddingValues
 import com.tencent.kuikly.compose.foundation.layout.Row
 import com.tencent.kuikly.compose.foundation.layout.Spacer
@@ -53,9 +48,7 @@ import com.tencent.kuikly.compose.foundation.layout.fillMaxSize
 import com.tencent.kuikly.compose.foundation.layout.fillMaxWidth
 import com.tencent.kuikly.compose.foundation.layout.height
 import com.tencent.kuikly.compose.foundation.layout.heightIn
-import com.tencent.kuikly.compose.foundation.layout.offset
 import com.tencent.kuikly.compose.foundation.layout.padding
-import com.tencent.kuikly.compose.foundation.layout.requiredWidth
 import com.tencent.kuikly.compose.foundation.layout.size
 import com.tencent.kuikly.compose.foundation.layout.width
 import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
@@ -76,6 +69,7 @@ import com.tencent.kuikly.compose.ui.Alignment
 import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.ui.draw.clipToBounds
 import com.tencent.kuikly.compose.ui.graphics.Color
+import com.tencent.kuikly.compose.ui.graphics.graphicsLayer
 import com.tencent.kuikly.compose.ui.input.pointer.PointerEventPass
 import com.tencent.kuikly.compose.ui.input.pointer.pointerInput
 import com.tencent.kuikly.compose.ui.input.pointer.positionChangeIgnoreConsumed
@@ -796,7 +790,7 @@ private fun PatientCards(
     var marqueeAnimationEnabled by remember(resetKey) { mutableStateOf(false) }
     LaunchedEffect(listState.isScrollInProgress, resetKey) {
         if (listState.isScrollInProgress) {
-            // 滚动期间移除跑马灯和 intrinsic 测量节点，避免文本绘制与 Lazy slot 复用在同一帧竞争。
+            // 滚动期间只暂停位移动画，保留每个 Lazy slot 的文本子树，避免手势首帧同时拆装可见卡片。
             marqueeAnimationEnabled = bedListMarqueeAnimationEnabled(
                 isScrollInProgress = true,
                 settleComplete = false,
@@ -1626,6 +1620,28 @@ private fun PatientMarqueeLabeledLine(
         valueSlotWidthPx = valueSlotWidthPx,
         density = density.density,
     )
+    val marqueeOffsetX = remember(marqueeKey, text, motion.travelDp) { Animatable(0f) }
+    LaunchedEffect(
+        marqueeKey,
+        text,
+        motion.travelDp,
+        motion.durationMillis,
+        marqueeEnabled,
+    ) {
+        // 停止滚动或 Lazy slot 复用时只重置位移，不替换 Layout/Text 子树。
+        marqueeOffsetX.snapTo(0f)
+        if (!marqueeEnabled || !motion.shouldAnimate) return@LaunchedEffect
+        while (true) {
+            marqueeOffsetX.animateTo(
+                targetValue = -motion.travelDp,
+                animationSpec = tween(
+                    durationMillis = motion.durationMillis,
+                    easing = LinearEasing,
+                ),
+            )
+            marqueeOffsetX.snapTo(0f)
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1648,101 +1664,60 @@ private fun PatientMarqueeLabeledLine(
                 .onSizeChanged(updateValueSlotWidth),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (marqueeEnabled) {
-                Text(
-                    text = text,
-                    color = Color.Transparent,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Visible,
-                    modifier = Modifier
-                        // wrapContentWidth(unbounded = true) 的外层尺寸仍会被值槽最大宽度截断，
-                        // 导致重复文本的起点早于真实绘制宽度；IntrinsicSize.Max 保留完整文本宽度。
-                        .requiredWidth(IntrinsicSize.Max)
-                        .onSizeChanged(updateTextWidth)
-                        .clearAndSetSemantics {},
-                )
-            }
-            if (marqueeEnabled && motion.shouldAnimate) {
-                key(marqueeKey, text, motion.travelDp, motion.durationMillis) {
-                    val transition = rememberInfiniteTransition(label = "BedListPatientMarquee")
-                    val offsetX by transition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = -motion.travelDp,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(
-                                durationMillis = motion.durationMillis,
-                                easing = LinearEasing,
-                            ),
-                            repeatMode = RepeatMode.Restart,
-                        ),
-                        label = "BedListPatientMarqueeOffset",
+            // 子树在静止、drag、fling 和 settle 四个阶段完全一致；仅 Animatable 是否推进不同。
+            // 这避免滚动开始时移除多个 InfiniteTransition/Layout，触发 Kuikly Lazy slot 空帧。
+            Layout(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(lineHeight.value.dp)
+                    // Kuikly 的 block graphicsLayer 只更新绘制层属性，不触发重组或重新布局。
+                    // 跑马灯若用 offset 逐帧读取动画值，会让 LazyColumn 可见卡片持续 relayout，
+                    // OpenHarmony 高速滚动时可能整批错过一帧绘制。
+                    .graphicsLayer {
+                        translationX = marqueeOffsetX.value * density.density
+                    },
+                content = {
+                    Text(
+                        text = text,
+                        color = valueColor,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible,
+                        modifier = Modifier.onSizeChanged(updateTextWidth),
                     )
-                    // 普通 Row 会把两个 Text 都按值槽的 maxWidth 测量，绘制虽可溢出，
-                    // 第二份副本的布局起点却仍是被截断的槽宽，长文本因此相互覆盖。
-                    // 这里仅在布局层对文本使用无限宽度测量，再按第一份实际 measuredWidth
-                    // 加固定间距放置；外层 Box 的 clipToBounds 仍是唯一可见窗口。
-                    Layout(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(lineHeight.value.dp)
-                            .offset(x = offsetX.dp),
-                        content = {
-                            Text(
-                                text = text,
-                                color = valueColor,
-                                fontSize = fontSize,
-                                lineHeight = lineHeight,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Visible,
-                                modifier = Modifier.onSizeChanged(updateTextWidth),
-                            )
-                            Spacer(modifier = Modifier.width(BedListMarqueeGapDp.dp))
-                            Text(
-                                text = text,
-                                color = valueColor,
-                                fontSize = fontSize,
-                                lineHeight = lineHeight,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Visible,
-                                modifier = Modifier.clearAndSetSemantics {},
-                            )
-                        },
-                        measurePolicy = { measurables, constraints ->
-                            val textConstraints = Constraints(
-                                maxWidth = Constraints.Infinity,
-                                maxHeight = constraints.maxHeight,
-                            )
-                            val first = measurables[0].measure(textConstraints)
-                            val gap = measurables[1].measure(
-                                Constraints.fixedWidth(BedListMarqueeGapDp.dp.roundToPx()),
-                            )
-                            val second = measurables[2].measure(textConstraints)
-                            val height = maxOf(first.measuredHeight, second.measuredHeight)
-                                .coerceIn(constraints.minHeight, constraints.maxHeight)
-                            layout(constraints.maxWidth, height) {
-                                first.place(0, 0)
-                                gap.place(first.measuredWidth, 0)
-                                second.place(first.measuredWidth + gap.measuredWidth, 0)
-                            }
-                        },
+                    Spacer(modifier = Modifier.width(BedListMarqueeGapDp.dp))
+                    Text(
+                        text = text,
+                        color = if (motion.shouldAnimate) valueColor else Color.Transparent,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible,
+                        modifier = Modifier.clearAndSetSemantics {},
                     )
-                }
-            } else {
-                Text(
-                    text = text,
-                    color = valueColor,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+                },
+                measurePolicy = { measurables, constraints ->
+                    val textConstraints = Constraints(
+                        maxWidth = Constraints.Infinity,
+                        maxHeight = constraints.maxHeight,
+                    )
+                    val first = measurables[0].measure(textConstraints)
+                    val gap = measurables[1].measure(
+                        Constraints.fixedWidth(BedListMarqueeGapDp.dp.roundToPx()),
+                    )
+                    val second = measurables[2].measure(textConstraints)
+                    val height = maxOf(first.measuredHeight, second.measuredHeight)
+                        .coerceIn(constraints.minHeight, constraints.maxHeight)
+                    layout(constraints.maxWidth, height) {
+                        first.place(0, 0)
+                        gap.place(first.measuredWidth, 0)
+                        second.place(first.measuredWidth + gap.measuredWidth, 0)
+                    }
+                },
+            )
         }
     }
 }
@@ -2102,8 +2077,8 @@ internal fun PatientListUiState.bedListSkeletonPatientListResetKey(): String {
 /**
  * OpenHarmony 患者长列表的同一套 Lazy 运行策略。
  *
- * 高量列表不额外组合和测量可视窗口两侧的患者卡，但保留 Kuikly 默认的单个相邻项预取；
- * 不在应用层扩展预取窗口或维护第二套 handle 队列，避免把长列表优化变成额外调度机制。
+ * 高量列表不额外组合或测量可视窗口两侧的患者卡，只保留 Kuikly 默认的单个相邻项预取；
+ * 真机同参数对照已经证明固定两项越界缓存不能减少高速 fling 的白色空帧，因此继续避免额外测量成本。
  */
 internal data class BedListPatientLazyListPolicy(
     val beyondBoundsItemCount: Int,
