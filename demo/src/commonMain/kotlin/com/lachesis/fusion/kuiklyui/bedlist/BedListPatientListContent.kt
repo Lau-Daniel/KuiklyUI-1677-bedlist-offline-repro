@@ -793,6 +793,26 @@ private fun PatientCards(
     modifier: Modifier = Modifier,
 ) {
     val listState = remember(resetKey) { LazyListState(0, 0) }
+    var marqueeAnimationEnabled by remember(resetKey) { mutableStateOf(false) }
+    LaunchedEffect(listState.isScrollInProgress, resetKey) {
+        if (listState.isScrollInProgress) {
+            // 滚动期间移除跑马灯和 intrinsic 测量节点，避免文本绘制与 Lazy slot 复用在同一帧竞争。
+            marqueeAnimationEnabled = bedListMarqueeAnimationEnabled(
+                isScrollInProgress = true,
+                settleComplete = false,
+            )
+        } else {
+            // drag/fling 结束后的首个 frame 仍可能在 renderer 中收尾，留出稳定窗口再恢复动画。
+            delay(BedListMarqueeSettleDelayMillis)
+            if (!listState.isScrollInProgress) {
+                marqueeAnimationEnabled = bedListMarqueeAnimationEnabled(
+                    isScrollInProgress = false,
+                    settleComplete = true,
+                )
+            }
+        }
+    }
+    val shouldAnimateMarquee = marqueeAnimationEnabled && !listState.isScrollInProgress
     val rowCache = remember(cardRenderConfig, patientIdentifierLabel) {
         BedListPatientCardRowCache(
             renderConfig = cardRenderConfig,
@@ -845,6 +865,7 @@ private fun PatientCards(
         ) { index ->
             PatientCard(
                 row = patientRows[index],
+                marqueeEnabled = shouldAnimateMarquee,
                 onAction = onAction,
                 metrics = metrics,
             )
@@ -855,6 +876,7 @@ private fun PatientCards(
 @Composable
 private fun PatientCard(
     row: BedListPatientCardRowState,
+    marqueeEnabled: Boolean,
     onAction: (PatientListAction) -> Unit,
     metrics: BedListVisualMetrics,
 ) {
@@ -919,6 +941,7 @@ private fun PatientCard(
                     marqueeKey = "${row.stableKey}:allergy",
                     valueColor = BedListSkeletonColors.AllergyText,
                     labelWidth = metrics.allergyMarqueeLabelWidth,
+                    marqueeEnabled = marqueeEnabled,
                     fontSize = metrics.patientInfoFontSize,
                     lineHeight = metrics.patientInfoLineHeight,
                     topPadding = metrics.patientTightLineTopPadding,
@@ -928,6 +951,7 @@ private fun PatientCard(
                     text = row.diagnosisText,
                     marqueeKey = "${row.stableKey}:diagnosis",
                     metrics = metrics,
+                    marqueeEnabled = marqueeEnabled,
                     fontSize = metrics.patientInfoFontSize,
                     lineHeight = metrics.patientInfoLineHeight,
                 )
@@ -1578,6 +1602,7 @@ private fun PatientMarqueeLabeledLine(
     label: String,
     text: String,
     marqueeKey: String,
+    marqueeEnabled: Boolean,
     valueColor: Color = BedListSkeletonColors.SecondaryText,
     labelWidth: Dp,
     fontSize: TextUnit = 16.sp,
@@ -1623,22 +1648,24 @@ private fun PatientMarqueeLabeledLine(
                 .onSizeChanged(updateValueSlotWidth),
             contentAlignment = Alignment.CenterStart,
         ) {
-            Text(
-                text = text,
-                color = Color.Transparent,
-                fontSize = fontSize,
-                lineHeight = lineHeight,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Visible,
-                modifier = Modifier
-                    // wrapContentWidth(unbounded = true) 的外层尺寸仍会被值槽最大宽度截断，
-                    // 导致重复文本的起点早于真实绘制宽度；IntrinsicSize.Max 保留完整文本宽度。
-                    .requiredWidth(IntrinsicSize.Max)
-                    .onSizeChanged(updateTextWidth)
-                    .clearAndSetSemantics {},
-            )
-            if (motion.shouldAnimate) {
+            if (marqueeEnabled) {
+                Text(
+                    text = text,
+                    color = Color.Transparent,
+                    fontSize = fontSize,
+                    lineHeight = lineHeight,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Visible,
+                    modifier = Modifier
+                        // wrapContentWidth(unbounded = true) 的外层尺寸仍会被值槽最大宽度截断，
+                        // 导致重复文本的起点早于真实绘制宽度；IntrinsicSize.Max 保留完整文本宽度。
+                        .requiredWidth(IntrinsicSize.Max)
+                        .onSizeChanged(updateTextWidth)
+                        .clearAndSetSemantics {},
+                )
+            }
+            if (marqueeEnabled && motion.shouldAnimate) {
                 key(marqueeKey, text, motion.travelDp, motion.durationMillis) {
                     val transition = rememberInfiniteTransition(label = "BedListPatientMarquee")
                     val offsetX by transition.animateFloat(
@@ -1748,6 +1775,7 @@ private fun PatientDiagnosisLine(
     text: String,
     marqueeKey: String,
     metrics: BedListVisualMetrics,
+    marqueeEnabled: Boolean,
     color: Color = BedListSkeletonColors.SecondaryText,
     fontSize: TextUnit = 16.sp,
     lineHeight: TextUnit = 20.sp,
@@ -1756,6 +1784,7 @@ private fun PatientDiagnosisLine(
         label = "入院诊断：",
         text = text,
         marqueeKey = marqueeKey,
+        marqueeEnabled = marqueeEnabled,
         valueColor = color,
         labelWidth = metrics.diagnosisMarqueeLabelWidth,
         fontSize = fontSize,
@@ -2174,6 +2203,11 @@ internal fun bedListMarqueeMotion(
     )
 }
 
+internal fun bedListMarqueeAnimationEnabled(
+    isScrollInProgress: Boolean,
+    settleComplete: Boolean,
+): Boolean = !isScrollInProgress && settleComplete
+
 private fun RiskLevel.criticalBadgeBackground(): Color {
     return when (this) {
         RiskLevel.Danger -> BedListSkeletonColors.DangerBackground
@@ -2478,6 +2512,7 @@ private const val BedListPatientRiskTagDefaultSpanCount = 5
 private const val BedListPatientRiskTagLongTextSpanCount = 4
 private const val BedListSelectionFeedbackRollbackMillis = 1500L
 private const val BedListRefreshFeedbackMinimumMillis = 1500L
+private const val BedListMarqueeSettleDelayMillis = 750L
 private const val BedListMarqueeGapDp = 24f
 private const val BedListMarqueeSpeedDpPerSecond = 30f
 private const val BED_LIST_KUIKLY_FLING_ENABLE_PROP = "flingEnable"

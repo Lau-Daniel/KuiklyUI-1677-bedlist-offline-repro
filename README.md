@@ -11,7 +11,7 @@
 - 复现路由：`BedListOfflineRepro`
 - BedList 主渲染文件：
   `demo/src/commonMain/kotlin/com/lachesis/fusion/kuiklyui/bedlist/BedListPatientListContent.kt`
-- 渲染文件 SHA-256：`2B58F37E14DA13B5A590610CF5216341D02D1525A6CFFAF504E7C36C62D4862A`
+- 渲染文件 SHA-256：`00693A720F44A59BC6F25898BE848C2952CB8CBE62F8DCFCF710D72EA41DF967`
 - 离线数据与交互适配文件：
   `demo/src/commonMain/kotlin/com/lachesis/fusion/kuiklyui/bedlist/BedListOfflineReproPage.kt`
 
@@ -32,7 +32,7 @@
 - `全科` / `本组` 切换以及本地责任患者筛选；
 - 生产卡片字段规划、条件行和动态高度；
 - 多行过敏史和诊断文本；
-- 生产跑马灯实现及 `30 dp/s` 速度；
+- 生产跑马灯实现及 `30 dp/s` 速度；滚动开始时立即停用跑马灯和 intrinsic 文本测量，滚动停止 `750 ms` 后再恢复；
 - 237 条固定测试患者状态，覆盖不同护理级别、标记、风险、文本长度和责任/非责任状态。
 
 这些数据仅用于测试，包含测试专用标识和展示值，不含 bearer token、Cookie、密码、登录凭据、医院 endpoint、病区编码、设备标识或抓取的 HTTP payload。复现页面和 OpenHarmony Host 入口都不会调用网络接口。
@@ -88,7 +88,7 @@ demo/build/bin/ohosArm64/<sharedDebugShared|sharedReleaseShared>/libshared_api.h
 
 请在 DevEco Studio 中用 API 23 兼容的 OpenHarmony SDK 打开 `ohosApp`，安装本地 OHPM 依赖，配置你自己的开发 bundle/签名 profile，然后构建 `entry` 模块。源码工程保留了正常的 `render` 模块和完整的 `core-render-ohos` 源码；已经测试过的设备 HAP 打包过程中使用的本地预构建 renderer 不属于这个源码包的依赖。
 
-修正后的 r13 Host-only Debug HAP 组装耗时约 `27.2s`，复用了上面的固定 Native 输入，没有再次执行 Native link。生成的 `libshared_api.h` SHA-256 为 `FE6357CB96BE2866465E734C661C2EFA9CF2D215CD5DE788BF2F324593E02BF8`，与已安装 `libshared.so` 的导出表一致。精确签名候选通过了 `verify-app` 并安装成功，SHA-256 为 `122829D77A04DCCCB0E34A02F8F644232BDF172E5A8EDE4C9A5F9AD4A976931F`。十秒启动预检查确认应用保持前台、只有一个存活进程，且没有新增 appfreeze、cppcrash 或 jscrash；临时截图也确认显示的是竖屏 BedList，而不是错误页或空白页。之后测试人员在同一个已安装 r13 HAP 上，进行范围/分组切换、多行跑马灯和快速滚动时，手工复现了短暂的白色/空白列表帧。这是手工观察结果，不是自动化截图断言。HAP、截图、崩溃诊断以及全部签名材料均未放入这个源码包。
+下面是此前 r13 Host-only Debug HAP 的历史验证记录，不是本源码包内的制品：组装耗时约 `27.2s`，复用了固定 Native 输入，没有再次执行 Native link。生成的 `libshared_api.h` SHA-256 为 `FE6357CB96BE2866465E734C661C2EFA9CF2D215CD5DE788BF2F324593E02BF8`，与当时安装的 `libshared.so` 导出表一致；精确签名候选 SHA-256 为 `122829D77A04DCCCB0E34A02F8F644232BDF172E5A8EDE4C9A5F9AD4A976931F`。此前的竖屏真机观察确认 BedList 能正常显示，并在范围/分组切换、多行跑马灯可见时快速滚动观察到明显的短暂白色/空白列表帧。当前源码已同步主线滚动保护：滚动期间跑马灯使用静态省略文本，停止 `750 ms` 后恢复动画；本次同步后仅补做了 Debug focused 编译，没有重新签名或安装 HAP，也没有把历史 HAP 证据冒充当前源码包证据。该结论是人工观察，不是自动化截图断言。HAP、截图以及全部签名材料均未放入这个源码包。
 
 如果在已经构建过 Host 的工程中替换了 `libshared_api.h`，请强制小型 `libkuikly_entry.so` CMake target 重新构建，或者从干净的 Host 输出目录开始。只复制文件并保留原时间戳，可能导致 NAPI bridge 仍使用旧版本，即使磁盘上的 header 字节已经正确。
 
