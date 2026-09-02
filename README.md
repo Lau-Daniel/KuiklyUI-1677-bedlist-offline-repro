@@ -53,7 +53,7 @@ demo/build/bin/ohosArm64/sharedDebugShared/libshared_api.h
 3. 在长、短患者卡片之间快速反复 fling。
 4. 重点观察多行过敏史或诊断跑马灯可见时，列表视口是否短暂变白或为空。
 
-当前 Debug HAP 已完成构建、签名、安装、40 秒存活检查和人工手测。构建成功或一次手测未出现白帧，都不等价于框架问题已被证明消除。
+当前 Debug HAP 已完成构建、签名、安装、40 秒存活检查和人工手测。构建成功或一次手测未出现白帧，都不等价于框架问题已被证明消除。该 demo 的 Release Native link 约为 Debug 的 `3.4x`，可作为异常耗时趋势参考，但不能等同 MNIS 主应用的绝对耗时；详见 [KuiklyUI#1687](https://github.com/Tencent-TDS/KuiklyUI/issues/1687)。
 
 ## 仓库边界
 
