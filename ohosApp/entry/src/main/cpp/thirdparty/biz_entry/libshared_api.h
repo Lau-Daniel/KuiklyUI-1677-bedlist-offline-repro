@@ -68,6 +68,9 @@ typedef struct {
 } libshared_kref_com_lachesis_fusion_kuiklyui_bedlist_BedListOfflineReproPage;
 typedef struct {
   libshared_KNativePtr pinned;
+} libshared_kref_com_lachesis_fusion_kuiklyui_designsystem_FusionAndroidBaselineComposeContainer;
+typedef struct {
+  libshared_KNativePtr pinned;
 } libshared_kref_com_lachesis_fusion_shared_patient_domain_PatientCardPregnancyMark;
 typedef struct {
   libshared_KNativePtr pinned;
@@ -793,6 +796,14 @@ typedef struct {
                 libshared_KInt (*com_lachesis_fusion_kuiklyui_bedlist_BedListRiskTagColors$stableprop_getter__)();
                 libshared_KInt (*com_lachesis_fusion_kuiklyui_bedlist_BedListVisualMetrics$stableprop_getter__)();
               } bedlist;
+              struct {
+                struct {
+                  libshared_KType* (*_type)(void);
+                  libshared_kref_com_lachesis_fusion_kuiklyui_designsystem_FusionAndroidBaselineComposeContainer (*FusionAndroidBaselineComposeContainer)();
+                } FusionAndroidBaselineComposeContainer;
+                libshared_KInt (*com_lachesis_fusion_kuiklyui_designsystem_FusionAndroidBaselineComposeContainer$stableprop_getter)();
+                libshared_KInt (*com_lachesis_fusion_kuiklyui_designsystem_FusionAndroidBaselineComposeContainer$stableprop_getter_)();
+              } designsystem;
             } kuiklyui;
             struct {
               struct {

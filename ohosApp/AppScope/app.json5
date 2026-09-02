@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.lachesis.mnis_online",
     "vendor": "example",
-    "versionCode": 202600829,
-    "versionName": "4.4.0.32-kuikly1677-r13",
+    "versionCode": 202600902,
+    "versionName": "4.4.0.32-kuikly1677-r17",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }

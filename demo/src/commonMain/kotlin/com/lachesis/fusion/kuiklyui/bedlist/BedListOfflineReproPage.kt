@@ -1,5 +1,6 @@
 package com.lachesis.fusion.kuiklyui.bedlist
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,10 +19,13 @@ import com.lachesis.fusion.shared.patient.presentation.PatientListItemState
 import com.lachesis.fusion.shared.patient.presentation.PatientListUiState
 import com.lachesis.fusion.shared.patient.presentation.PatientRiskTagPresentationState
 import com.lachesis.fusion.shared.patient.presentation.PatientRiskTagPresentationStyle
-import com.tencent.kuikly.compose.ComposeContainer
+import com.lachesis.fusion.kuiklyui.designsystem.FusionAndroidBaselineComposeContainer
+import com.lachesis.fusion.kuiklyui.designsystem.fusionAndroidReferenceComposeDensity
 import com.tencent.kuikly.compose.setContent
 import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.foundation.layout.fillMaxSize
+import com.tencent.kuikly.compose.ui.platform.LocalDensity
+import com.tencent.kuikly.compose.ui.unit.Density
 import com.tencent.kuikly.core.annotations.Page
 
 /**
@@ -32,34 +36,42 @@ import com.tencent.kuikly.core.annotations.Page
  * contentType、宽度测量和跑马灯均由主线原实现负责。
  */
 @Page("BedListOfflineRepro")
-class BedListOfflineReproPage : ComposeContainer() {
+class BedListOfflineReproPage : FusionAndroidBaselineComposeContainer() {
     override fun willInit() {
         super.willInit()
+        // 仅校准 BedList 自身组合树，沿用主线 Android reference logical viewport；
+        // 不改 Kuikly pager density，也不把单台设备物理比例写进通用 Host。
+        val patientContentDensity = fusionAndroidReferenceComposeDensity(
+            deviceDensity = pageData.density,
+            isOhOs = pageData.isOhOs,
+        )
         setContent {
             var state by remember { mutableStateOf(offlineBedListState()) }
-            BedListPatientListContent(
-                state = state,
-                onAction = { action ->
-                    state = when (action) {
-                        is PatientListAction.SelectCareScope -> offlineBedListState(
-                            isCareScopeSelected = action.isCare,
-                            selectedGroupType = state.selectedGroupType ?: PatientGroupType.All,
-                        )
-                        is PatientListAction.SelectGroup -> offlineBedListState(
-                            isCareScopeSelected = state.isCareScopeSelected,
-                            selectedGroupType = action.type,
-                        )
-                        PatientListAction.Refresh,
-                        PatientListAction.OpenSearch,
-                        PatientListAction.OpenFunctionMenu,
-                        is PatientListAction.SelectPatient,
-                        is PatientListAction.SelectSearchPatient,
-                        -> state
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-                currentUserDisplayName = "测试护士",
-            )
+            CompositionLocalProvider(LocalDensity provides Density(patientContentDensity)) {
+                BedListPatientListContent(
+                    state = state,
+                    onAction = { action ->
+                        state = when (action) {
+                            is PatientListAction.SelectCareScope -> offlineBedListState(
+                                isCareScopeSelected = action.isCare,
+                                selectedGroupType = state.selectedGroupType ?: PatientGroupType.All,
+                            )
+                            is PatientListAction.SelectGroup -> offlineBedListState(
+                                isCareScopeSelected = state.isCareScopeSelected,
+                                selectedGroupType = action.type,
+                            )
+                            PatientListAction.Refresh,
+                            PatientListAction.OpenSearch,
+                            PatientListAction.OpenFunctionMenu,
+                            is PatientListAction.SelectPatient,
+                            is PatientListAction.SelectSearchPatient,
+                            -> state
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    currentUserDisplayName = "测试护士",
+                )
+            }
         }
     }
 }

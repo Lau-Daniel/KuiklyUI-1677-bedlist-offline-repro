@@ -7,8 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import com.tencent.kuikly.compose.animation.core.Animatable
 import com.tencent.kuikly.compose.animation.core.LinearEasing
+import com.tencent.kuikly.compose.animation.core.animate
 import com.tencent.kuikly.compose.animation.core.tween
 import com.lachesis.fusion.shared.patient.domain.PatientGroupType
 import com.lachesis.fusion.shared.patient.domain.RiskLevel
@@ -1620,7 +1620,7 @@ private fun PatientMarqueeLabeledLine(
         valueSlotWidthPx = valueSlotWidthPx,
         density = density.density,
     )
-    val marqueeOffsetX = remember(marqueeKey, text, motion.travelDp) { Animatable(0f) }
+    var marqueeOffsetX by remember(marqueeKey, text, motion.travelDp) { mutableStateOf(0f) }
     LaunchedEffect(
         marqueeKey,
         text,
@@ -1629,17 +1629,20 @@ private fun PatientMarqueeLabeledLine(
         marqueeEnabled,
     ) {
         // 停止滚动或 Lazy slot 复用时只重置位移，不替换 Layout/Text 子树。
-        marqueeOffsetX.snapTo(0f)
+        marqueeOffsetX = 0f
         if (!marqueeEnabled || !motion.shouldAnimate) return@LaunchedEffect
         while (true) {
-            marqueeOffsetX.animateTo(
+            animate(
+                initialValue = 0f,
                 targetValue = -motion.travelDp,
                 animationSpec = tween(
                     durationMillis = motion.durationMillis,
                     easing = LinearEasing,
                 ),
-            )
-            marqueeOffsetX.snapTo(0f)
+            ) { value, _ ->
+                marqueeOffsetX = value
+            }
+            marqueeOffsetX = 0f
         }
     }
     Row(
@@ -1664,7 +1667,7 @@ private fun PatientMarqueeLabeledLine(
                 .onSizeChanged(updateValueSlotWidth),
             contentAlignment = Alignment.CenterStart,
         ) {
-            // 子树在静止、drag、fling 和 settle 四个阶段完全一致；仅 Animatable 是否推进不同。
+            // 子树在静止、drag、fling 和 settle 四个阶段完全一致；仅位移状态是否推进不同。
             // 这避免滚动开始时移除多个 InfiniteTransition/Layout，触发 Kuikly Lazy slot 空帧。
             Layout(
                 modifier = Modifier
@@ -1674,7 +1677,7 @@ private fun PatientMarqueeLabeledLine(
                     // 跑马灯若用 offset 逐帧读取动画值，会让 LazyColumn 可见卡片持续 relayout，
                     // OpenHarmony 高速滚动时可能整批错过一帧绘制。
                     .graphicsLayer {
-                        translationX = marqueeOffsetX.value * density.density
+                        translationX = marqueeOffsetX * density.density
                     },
                 content = {
                     Text(
